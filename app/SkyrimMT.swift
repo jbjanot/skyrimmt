@@ -828,7 +828,8 @@ enum UpdateState: Equatable {
 }
 
 final class Updater: ObservableObject {
-    static let repo = "HorrorPills/skyrimmt"
+    /// This fork and the original: the newest release of either is offered (upstream moving past the fork wins).
+    static let repos = ["jbjanot/skyrimmt", "HorrorPills/skyrimmt"]
     static let assetName = "SkyrimMT-app.zip"
     @Published var state: UpdateState = .idle
     @Published var latest: ReleaseInfo?
@@ -836,9 +837,9 @@ final class Updater: ObservableObject {
     let current: String = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "dev"
     private var timer: Timer?
 
-    var feedURL: URL {
-        if let s = UserDefaults.standard.string(forKey: "updateFeedURL"), let u = URL(string: s) { return u }
-        return URL(string: "https://api.github.com/repos/\(Updater.repo)/releases/latest")!
+    var feedURLs: [URL] {
+        if let s = UserDefaults.standard.string(forKey: "updateFeedURL"), let u = URL(string: s) { return [u] }
+        return Updater.repos.map { URL(string: "https://api.github.com/repos/\($0)/releases/latest")! }
     }
 
     func startAutomaticChecks() {
@@ -850,11 +851,33 @@ final class Updater: ObservableObject {
     func check() {
         if state == .checking || state == .downloading || state == .installing { return }
         state = .checking
-        var req = URLRequest(url: feedURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        let group = DispatchGroup(), lock = NSLock()
+        var results: [Result<ReleaseInfo?, UpdateError>] = []
+        for url in feedURLs {
+            group.enter()
+            fetchLatest(url) { r in lock.lock(); results.append(r); lock.unlock(); group.leave() }
+        }
+        group.notify(queue: .main) {
+            self.lastChecked = Date()
+            let found = results.compactMap { try? $0.get() }
+            let failure = results.lazy.compactMap { r -> UpdateError? in if case .failure(let e) = r { return e }; return nil }.first
+            if found.isEmpty, let e = failure { self.state = .failed(e.message); return }   // a repo that answers is enough
+            let r = found.max { isNewer($1.tag, than: $0.tag) }
+            self.latest = r
+            if let r = r, isNewer(r.tag, than: self.current) {
+                self.state = .available(r.tag)
+                if ProcessInfo.processInfo.environment["SKYRIMMT_UPDATE_AUTOINSTALL"] == "1" { self.install(gameRunning: false) }
+            } else { self.state = r == nil ? .noReleases : .upToDate }
+        }
+    }
+
+    /// One repository's latest release carrying the app zip (nil: none yet, or no such repository).
+    private func fetchLatest(_ url: URL, done: @escaping (Result<ReleaseInfo?, UpdateError>) -> Void) {
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("SkyrimMT-launcher/\(current)", forHTTPHeaderField: "User-Agent")
         URLSession.shared.dataTask(with: req) { data, resp, err in
-            let result: Result<ReleaseInfo?, UpdateError> = {
+            done({
                 if let err = err { return .failure(UpdateError(message: "Couldn't reach GitHub: \(err.localizedDescription)")) }
                 if let h = resp as? HTTPURLResponse, h.statusCode == 404 { return .success(nil) }   // no release (or repo) yet
                 if let h = resp as? HTTPURLResponse, h.statusCode != 200 { return .failure(UpdateError(message: "GitHub answered HTTP \(h.statusCode).")) }
@@ -866,19 +889,7 @@ final class Updater: ObservableObject {
                       let s = a["browser_download_url"] as? String, let u = URL(string: s) else { return .success(nil) }
                 return .success(ReleaseInfo(tag: tag, notes: j["body"] as? String ?? "", page: j["html_url"] as? String ?? "",
                                             zipURL: u, digest: a["digest"] as? String, size: a["size"] as? Int ?? 0))
-            }()
-            DispatchQueue.main.async {
-                self.lastChecked = Date()
-                switch result {
-                case .failure(let e): self.state = .failed(e.message)
-                case .success(let r):
-                    self.latest = r
-                    if let r = r, isNewer(r.tag, than: self.current) {
-                        self.state = .available(r.tag)
-                        if ProcessInfo.processInfo.environment["SKYRIMMT_UPDATE_AUTOINSTALL"] == "1" { self.install(gameRunning: false) }
-                    } else { self.state = r == nil ? .noReleases : .upToDate }
-                }
-            }
+            }())
         }.resume()
     }
 
