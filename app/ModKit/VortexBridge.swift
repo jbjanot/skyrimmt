@@ -33,5 +33,11 @@ extension ModKit {
             .write(to: gameDir.appendingPathComponent(rel), options: .atomic)
     }
 
+    /// Keizaal Online's launcher, installed for the same Wine user as plugins.txt (…/AppData/Local/…)
+    var keizaalLauncherInstalled: Bool {
+        FileManager.default.fileExists(atPath: pluginsTxt.deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Programs/skyrim-rp-launcher/keizaal-online.exe").path)
+    }
+
     static func windowsPath(_ p: String) -> String { p.replacingOccurrences(of: "/", with: "\\") }
 }

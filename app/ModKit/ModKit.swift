@@ -296,6 +296,9 @@ public final class ModKit {
         try lock.acquire(); defer { lock.release() }
         try recoverSlotSwapIfNeeded()
         let report = try deployer.deploy(stagedMods(profile))
+        // Keizaal's setup watches the game folder while its launcher is open: list the files as soon as they're there
+        // (best effort: Start Keizaal Online writes them again and reports errors)
+        if keizaalLauncherInstalled { _ = try? writeVortexDeployment() }
         let isCollection = installedCollections().contains { $0.profile == profile.name } && !profile.loadOrder.isEmpty
         try syncLoadOrder(profile.loadOrder, newActive: !isCollection)
         return report
