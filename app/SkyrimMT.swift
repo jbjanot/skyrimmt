@@ -813,8 +813,13 @@ final class Launcher: ObservableObject {
         refreshChecks()
         guard readyToPlay else { message = localized("Setup incomplete — see the Setup tab."); return }
         guard !otherSteam else { message = localized("tf2mt's Steam is running with the same account. Close it first."); return }
-        launching = true; launchingKeizaal = true
         let mk = ModKit.standard(home: URL(fileURLWithPath: Paths.game))
+        // its launcher only starts Steam's copy (and downgrades it itself): SkyrimMT's side-by-side versions are invisible to it
+        guard mk.gameVersionKey == "steam" else {
+            message = localized("Keizaal's launcher only uses Steam's copy of the game and downgrades it itself. Set the game version to Steam in the Mod Manager.")
+            return
+        }
+        launching = true; launchingKeizaal = true
         mk.recordLaunch()
         mk.restoreDriftedBinaries()
         do { try mk.writeVortexDeployment() } catch { message = localizedFormat("Couldn't list the deployed files for Keizaal: %@", "\(error)") }
