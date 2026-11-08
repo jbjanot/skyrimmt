@@ -34,6 +34,8 @@ if ! game_running; then
 fi
 
 ensure_steam || { echo "Steam did not log on — open Steam (scripts/steam.sh --login)"; exit 1; }
+# push-to-talk as a toggle (F3 holds V until pressed again); quits by itself with the launcher and the game
+tt="$SKYRIMMT_ROOT/tools/talktoggle.exe"; [ -f "$tt" ] && "$SKYRIMMT_ROOT/scripts/run-exe.sh" "$tt" F3 V >/dev/null
 # already open: a second start would hand its last argument to the launcher as a login link (it crashes on the flag)
 pgrep -f 'keizaal-online\.exe' >/dev/null && { echo "launcher already open"; exit 0; }
 "$SKYRIMMT_ROOT/scripts/run-exe.sh" "$EXE" --in-process-gpu

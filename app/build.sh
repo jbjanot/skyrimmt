@@ -99,6 +99,10 @@ else echo "warning: mingw-w64 missing — Mac Fixes SKSE plugin not bundled"; fi
 if command -v x86_64-w64-mingw32-gcc >/dev/null && "$ROOT/tools/xinputprobe/build.sh" >/dev/null; then
   cp "$ROOT/build/xinputprobe/xinputprobe.exe" "$RES/skyrimmt/tools/"
 else echo "warning: mingw-w64 missing — controller probe not bundled"; fi
+# Keizaal Online: push-to-talk toggle (scripts/keizaal.sh)
+if command -v x86_64-w64-mingw32-gcc >/dev/null && "$ROOT/tools/talktoggle/build.sh" >/dev/null; then
+  cp "$ROOT/build/talktoggle/talktoggle.exe" "$RES/skyrimmt/tools/"
+else echo "warning: mingw-w64 missing — Keizaal talk toggle not bundled"; fi
 SES="$APP/Contents/Helpers/SkyrimMT Session.app"; mkdir -p "$SES/Contents/MacOS"
 swiftc -O -target arm64-apple-macos13 Session/SkyrimMTSession.swift -o "$SES/Contents/MacOS/skyrimmt-session"
 cat > "$SES/Contents/Info.plist" <<PLIST
