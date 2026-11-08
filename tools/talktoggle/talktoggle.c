@@ -3,8 +3,8 @@
 //   talktoggle.exe [TOGGLE TALK]     keys as F1…F12 or a letter; default F3 V (Keizaal binds F1, F2 and F6 already)
 // A low-level keyboard hook only sees keys typed into Wine windows, so other Mac apps keep the toggle key, and the
 // held key is injected like a real one (DirectInput, raw input and hooks all see it). It swallows the toggle key and
-// flips the talk key's real state (Wine releases it when the game loses focus: one press talks again), and exits
-// (releasing the key) once neither Keizaal's launcher nor Skyrim runs. One instance per prefix.
+// flips the talk key's real state; leaving the game (Cmd+Tab) ends the talk, and back in it a second press is needed.
+// It exits (releasing the key) once neither Keizaal's launcher nor Skyrim runs. One instance per prefix.
 #include <windows.h>
 #include <tlhelp32.h>
 #include <stdio.h>
