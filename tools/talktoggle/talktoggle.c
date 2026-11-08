@@ -2,16 +2,15 @@
 // the next press releases it. Runs in the game's Wine prefix next to Keizaal's launcher (scripts/keizaal.sh starts it):
 //   talktoggle.exe [TOGGLE TALK]     keys as F1…F12 or a letter; default F3 V (Keizaal binds F1, F2 and F6 already)
 // A low-level keyboard hook only sees keys typed into Wine windows, so other Mac apps keep the toggle key, and the
-// held key is injected like a real one (DirectInput, raw input and hooks all see it). It swallows the toggle key,
-// lets a real press of the talk key end the toggle, and exits (releasing the key) once neither Keizaal's launcher nor
-// Skyrim runs. One instance per prefix.
+// held key is injected like a real one (DirectInput, raw input and hooks all see it). It swallows the toggle key and
+// flips the talk key's real state (Wine releases it when the game loses focus: one press talks again), and exits
+// (releasing the key) once neither Keizaal's launcher nor Skyrim runs. One instance per prefix.
 #include <windows.h>
 #include <tlhelp32.h>
 #include <stdio.h>
 #include <ctype.h>
 
 static UINT toggleVk = VK_F3, talkVk = 'V';
-static BOOL held;
 static DWORD mainThread;
 #define WM_FLIP (WM_APP + 1)
 
@@ -29,21 +28,23 @@ static void sendTalk(BOOL down) {
     in.ki.wScan = (WORD)MapVirtualKeyA(talkVk, MAPVK_VK_TO_VSC);
     in.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
     SendInput(1, &in, sizeof in);
-    held = down;
 }
 
 static LRESULT CALLBACK hook(int code, WPARAM wp, LPARAM lp) {
     const KBDLLHOOKSTRUCT *k = (const KBDLLHOOKSTRUCT *)lp;
     if (code == HC_ACTION && !(k->flags & LLKHF_INJECTED)) {
-        BOOL down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
         if (k->vkCode == toggleVk) {   // swallowed; the flip runs outside the hook (SendInput from here would re-enter it)
-            if (down && !(k->flags & LLKHF_UP)) PostThreadMessageA(mainThread, WM_FLIP, 0, 0);
+            static BOOL pressed;       // key repeat sends more key-downs: only the first one flips
+            BOOL down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
+            if (down && !pressed) PostThreadMessageA(mainThread, WM_FLIP, 0, 0);
+            pressed = down;
             return 1;
         }
-        if (k->vkCode == talkVk && !down) held = FALSE;   // a real press of the talk key took over: its release ends it
     }
     return CallNextHookEx(NULL, code, wp, lp);
 }
+
+static BOOL talkDown(void) { return (GetAsyncKeyState(talkVk) & 0x8000) != 0; }
 
 static BOOL running(const char *const names[], int count) {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -69,11 +70,11 @@ int main(int argc, char **argv) {
     MSG m;
     int idle = 0;   // timer ticks without Keizaal: started before its launcher, so allow it a minute to appear
     while (GetMessageA(&m, NULL, 0, 0) > 0) {
-        if (m.message == WM_FLIP) sendTalk(!held);
+        if (m.message == WM_FLIP) sendTalk(!talkDown());
         else if (m.message == WM_TIMER) idle = running(keizaal, 2) ? -1 : (idle < 0 ? 99 : idle + 1);
         if (idle >= 12) break;
     }
-    if (held) sendTalk(FALSE);
+    if (talkDown()) sendTalk(FALSE);
     UnhookWindowsHookEx(h);
     return 0;
 }
